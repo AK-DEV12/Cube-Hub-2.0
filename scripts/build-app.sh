@@ -1,10 +1,12 @@
 #!/bin/bash
-# Builds build/CubeHub.app from the Swift package.
+# Builds build/CubeHub.app from the Swift package, for both Apple Silicon and Intel.
+# Pass --zip to also write build/CubeHub.zip, ready to attach to a release.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-swift build -c release
-BIN="$(swift build -c release --show-bin-path)/CubeHub"
+ARCHS=(--arch arm64 --arch x86_64)
+swift build -c release "${ARCHS[@]}"
+BIN="$(swift build -c release "${ARCHS[@]}" --show-bin-path)/CubeHub"
 
 APP="build/CubeHub.app"
 WORK="$(mktemp -d)"
@@ -29,3 +31,10 @@ cp "$WORK/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 codesign --force --sign - "$APP" >/dev/null 2>&1
 
 echo "Built $APP"
+
+if [[ "${1:-}" == "--zip" ]]; then
+    # ditto keeps the code signature intact, which plain zip does not.
+    rm -f build/CubeHub.zip
+    ditto -c -k --keepParent "$APP" build/CubeHub.zip
+    echo "Built build/CubeHub.zip"
+fi
