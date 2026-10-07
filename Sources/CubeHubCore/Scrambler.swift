@@ -1,35 +1,55 @@
 import Foundation
 
-/// Random-move 3x3 scrambles in WCA notation.
+/// Random-move scrambles in WCA notation.
 public enum Scrambler {
-    private static let faces: [(name: String, axis: Int)] = [
-        ("U", 0), ("D", 0), ("L", 1), ("R", 1), ("F", 2), ("B", 2),
-    ]
+    private struct Turn {
+        let name: String
+        let axis: Int
+    }
+
     private static let suffixes = ["", "'", "2"]
 
-    public static func generate<G: RandomNumberGenerator>(length: Int = 20, using rng: inout G) -> String {
+    private static func turns(for puzzle: Puzzle) -> [Turn] {
+        let outer = [
+            Turn(name: "U", axis: 0), Turn(name: "D", axis: 0),
+            Turn(name: "L", axis: 1), Turn(name: "R", axis: 1),
+            Turn(name: "F", axis: 2), Turn(name: "B", axis: 2),
+        ]
+        switch puzzle {
+        case .two:
+            // Three faces reach every 2x2 position; the rest would only turn the whole cube.
+            return [Turn(name: "R", axis: 1), Turn(name: "U", axis: 0), Turn(name: "F", axis: 2)]
+        case .three:
+            return outer
+        case .four:
+            return outer + [Turn(name: "Uw", axis: 0), Turn(name: "Rw", axis: 1), Turn(name: "Fw", axis: 2)]
+        }
+    }
+
+    public static func generate<G: RandomNumberGenerator>(for puzzle: Puzzle = .three, length: Int? = nil, using rng: inout G) -> String {
+        let turns = turns(for: puzzle)
+        let length = length ?? puzzle.scrambleLength
         var moves: [String] = []
-        var last: Int?
-        var beforeLast: Int?
+        // Turns on one axis commute, so repeating one within an unbroken run
+        // on that axis ("R L R") would just be a longer way to write a shorter scramble.
+        var runAxis: Int?
+        var run: [Int] = []
         while moves.count < length {
-            let face = Int.random(in: 0..<faces.count, using: &rng)
-            // Never turn the same face twice in a row.
-            if face == last { continue }
-            // Opposite faces commute, so "R L R" is really "R2 L" — skip it.
-            if let last, let beforeLast,
-               faces[face].axis == faces[last].axis,
-               faces[beforeLast].axis == faces[last].axis {
-                continue
+            let pick = Int.random(in: turns.indices, using: &rng)
+            if turns[pick].axis == runAxis {
+                if run.contains(pick) { continue }
+                run.append(pick)
+            } else {
+                runAxis = turns[pick].axis
+                run = [pick]
             }
-            moves.append(faces[face].name + suffixes.randomElement(using: &rng)!)
-            beforeLast = last
-            last = face
+            moves.append(turns[pick].name + suffixes.randomElement(using: &rng)!)
         }
         return moves.joined(separator: " ")
     }
 
-    public static func generate(length: Int = 20) -> String {
+    public static func generate(for puzzle: Puzzle = .three, length: Int? = nil) -> String {
         var rng = SystemRandomNumberGenerator()
-        return generate(length: length, using: &rng)
+        return generate(for: puzzle, length: length, using: &rng)
     }
 }

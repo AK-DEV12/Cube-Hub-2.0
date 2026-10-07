@@ -13,11 +13,20 @@ enum Snapshots {
         return write(NSBitmapImageRep(cgImage: image), to: url)
     }
 
+    /// Sample history spread over the last few days, for each puzzle.
     static func seed(_ store: SolveStore) {
-        let times = [2231, 1987, 2105, 1844, 2390, 1762, 1915, 2048, 1699, 1880, 2512, 1803, 1731, 1958]
-        for (offset, centis) in times.enumerated() {
-            let date = Date().addingTimeInterval(TimeInterval(offset - times.count) * 90)
-            store.add(Solve(centis: centis, scramble: Scrambler.generate(), date: date))
+        let samples: [(Puzzle, [Int])] = [
+            (.three, [2231, 1987, 2105, 1844, 2390, 1762, 1915, 2048, 1699, 1880, 2512, 1803, 1731, 1958]),
+            (.two, [612, 548, 701, 495, 580, 633]),
+            (.four, [8420, 7915, 9033, 8108]),
+        ]
+        for (puzzle, times) in samples {
+            for (offset, centis) in times.enumerated() {
+                // Three or four solves a day, ending today.
+                let daysAgo = (times.count - 1 - offset) / 4
+                let date = Date().addingTimeInterval(TimeInterval(-daysAgo * 86_400 - (times.count - offset) * 90))
+                store.add(Solve(centis: centis, scramble: Scrambler.generate(for: puzzle), puzzle: puzzle, date: date))
+            }
         }
     }
 
@@ -160,11 +169,54 @@ enum Snapshots {
                 print("no scroll view found")
             }
 
+            // The panels over the card, and the other puzzles.
+            await pause(0.3)
+            model.showCalendar()
+            await pause(0.5)
+            capture("10-calendar")
+            key(.keyDown)
+            await pause(0.5)
+            key(.keyUp)
+            await pause(0.2)
+            print("space with the calendar open: phase \(model.phase), sheet \(String(describing: model.sheet))")
+            key(.keyDown, "\u{1B}", code: 53)
+            await pause(0.4)
+            print("after esc: sheet \(String(describing: model.sheet))")
+            if let day = model.solveDays.keys.sorted().first {
+                model.setDateFilter(day)
+                await pause(0.4)
+                print("filtered to \(DayFormat.short(day)): \(model.listedSolves.count) of \(model.solves.count) solves listed")
+                capture("11-filtered")
+                model.showCalendar()
+                await pause(0.5)
+                capture("12-calendar-selected")
+                model.setDateFilter(nil)
+            }
+            if let entry = model.listedSolves.dropFirst(2).first {
+                model.showDetails(for: entry.solve)
+                await pause(0.5)
+                capture("13-solve-details")
+                model.closeSheet()
+            }
+            for (name, digit, code) in [("14-four-by-four", "4", UInt16(21)), ("16-two-by-two", "2", UInt16(19))] {
+                key(.keyDown, digit, code: code, command: true)
+                await pause(1.2)
+                print("\(model.puzzle.rawValue): \(model.solves.count) solves, scramble \(model.scramble)")
+                capture(name)
+                if model.puzzle == .four, let entry = model.listedSolves.first {
+                    model.showDetails(for: entry.solve)
+                    await pause(0.5)
+                    capture("15-four-by-four-details")
+                    model.closeSheet()
+                    await pause(0.3)
+                }
+            }
+
             // Squash the window as short as it goes.
             let corner = (WidgetLayout.margin + 15) * window.frame.width / WidgetLayout.baseWidth
             await drag(from: NSPoint(x: window.frame.maxX - corner, y: window.frame.minY + corner), by: NSPoint(x: 0, y: 900))
             report("after dragging the grip up as far as it goes")
-            capture("10-short")
+            capture("17-short")
             NSApp.terminate(nil)
         }
     }

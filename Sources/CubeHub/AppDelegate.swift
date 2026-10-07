@@ -311,7 +311,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
         switch (event.type, event.keyCode) {
         case (.keyDown, Self.spaceKey):
-            if !event.isARepeat {
+            // With a panel open over the card, space is left alone.
+            if !event.isARepeat && model.sheet == nil {
                 model.spaceDown(at: event.timestamp)
             }
             return nil
@@ -331,6 +332,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             return true
         }
         switch event.charactersIgnoringModifiers?.lowercased() {
+        case "2": model.selectPuzzle(.two)
+        case "3": model.selectPuzzle(.three)
+        case "4": model.selectPuzzle(.four)
         case "r": newScramble(nil)
         case "t": toggleAlwaysOnTop(nil)
         case "=", "+": makeBigger(nil)
@@ -353,9 +357,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let menu = NSMenu()
         menu.addItem(withTitle: isWidgetShowing ? "Hide Cube Hub" : "Show Cube Hub", action: #selector(toggleWidget(_:)), keyEquivalent: isWidgetShowing ? "w" : "")
         menu.addItem(.separator())
+
+        let puzzles = NSMenu()
+        for puzzle in Puzzle.allCases {
+            let item = puzzles.addItem(withTitle: puzzle.rawValue, action: #selector(choosePuzzle(_:)), keyEquivalent: "\(puzzle.size)")
+            item.representedObject = puzzle.rawValue
+        }
+        let puzzleItem = menu.addItem(withTitle: "Puzzle", action: nil, keyEquivalent: "")
+        puzzleItem.submenu = puzzles
+
         menu.addItem(withTitle: "New Scramble", action: #selector(newScramble(_:)), keyEquivalent: "r")
         menu.addItem(withTitle: "Delete Last Solve", action: #selector(deleteLastSolve(_:)), keyEquivalent: "\u{8}")
-        menu.addItem(withTitle: "Clear All Solves…", action: #selector(clearAllSolves(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "Clear All \(model.puzzle.rawValue) Solves…", action: #selector(clearAllSolves(_:)), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "Keep on Top", action: #selector(toggleAlwaysOnTop(_:)), keyEquivalent: "t")
 
@@ -376,7 +389,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Cube Hub", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
-        for item in menu.items + size.items where item.action != #selector(NSApplication.terminate(_:)) && item.action != nil {
+        for item in menu.items + puzzles.items + size.items where item.action != #selector(NSApplication.terminate(_:)) && item.action != nil {
             item.target = self
         }
         return menu
@@ -394,6 +407,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             let scale = menuItem.representedObject as? Double ?? 0
             menuItem.state = abs(currentScale - scale) < 0.01 ? .on : .off
             return true
+        case #selector(choosePuzzle(_:)):
+            menuItem.state = menuItem.representedObject as? String == model.puzzle.rawValue ? .on : .off
+            return model.phase == .idle
         case #selector(newScramble(_:)):
             return model.phase == .idle
         case #selector(deleteLastSolve(_:)), #selector(clearAllSolves(_:)):
@@ -401,6 +417,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         default:
             return true
         }
+    }
+
+    @objc private func choosePuzzle(_ sender: NSMenuItem) {
+        guard let puzzle = (sender.representedObject as? String).flatMap(Puzzle.init(rawValue:)) else { return }
+        model.selectPuzzle(puzzle)
     }
 
     @objc private func newScramble(_ sender: Any?) {
@@ -461,8 +482,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let count = model.solves.count
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = count == 1 ? "Delete your solve?" : "Delete all \(count) solves?"
-        alert.informativeText = "Your times, averages and bests will be erased. This can't be undone."
+        let puzzle = model.puzzle.rawValue
+        alert.messageText = count == 1 ? "Delete your \(puzzle) solve?" : "Delete all \(count) \(puzzle) solves?"
+        alert.informativeText = "Your \(puzzle) times, averages and bests will be erased. Other puzzles keep theirs. This can't be undone."
         alert.addButton(withTitle: "Delete All").hasDestructiveAction = true
         alert.addButton(withTitle: "Cancel")
         NSApp.activate(ignoringOtherApps: true)

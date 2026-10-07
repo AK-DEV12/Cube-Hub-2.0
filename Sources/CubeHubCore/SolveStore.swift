@@ -31,6 +31,11 @@ public final class SolveStore {
         save()
     }
 
+    public func removeAll(where shouldRemove: (Solve) -> Bool) {
+        solves.removeAll(where: shouldRemove)
+        save()
+    }
+
     private func load() {
         guard let data = try? Data(contentsOf: url) else { return }
         let decoder = JSONDecoder()

@@ -3,6 +3,7 @@ import CubeHubCore
 
 enum Theme {
     static let card = Color(red: 0.122, green: 0.118, blue: 0.114)
+    static let sheet = Color(red: 0.165, green: 0.16, blue: 0.155)
     static let ink = Color(red: 0.96, green: 0.955, blue: 0.93)
     static let muted = Color.white.opacity(0.5)
     static let faint = Color.white.opacity(0.3)
@@ -64,7 +65,7 @@ private struct WidgetContent: View {
     private var isRunning: Bool { model.phase == .running }
 
     var body: some View {
-        let cube = Cube(scramble: model.scramble)
+        let cube = Cube(size: model.puzzle.size, scramble: model.scramble)
         ZStack(alignment: .topLeading) {
             peekingMascot(cube)
             card(cube)
@@ -87,14 +88,10 @@ private struct WidgetContent: View {
     private func peekingMascot(_ cube: Cube) -> some View {
         // Whole half-points keep the sprite's pixels sharp.
         let pixel = max(1, (5 * u * 2).rounded() / 2)
-        return MascotView(
-            mood: model.mood,
-            pattern: cube.stickers(on: .front).map(CubeColor.init(face:)),
-            pixel: pixel
-        )
-        .offset(x: WidgetLayout.gutter * u - (CGFloat(MascotSprite.bodyLeft) + peek) * pixel, y: 20 * u)
-        .animation(.spring(duration: 0.4, bounce: 0.35), value: model.mood)
-        .allowsHitTesting(false)
+        return MascotView(mood: model.mood, pattern: MascotSprite.pattern(for: cube), pixel: pixel)
+            .offset(x: WidgetLayout.gutter * u - (CGFloat(MascotSprite.bodyLeft) + peek) * pixel, y: 20 * u)
+            .animation(.spring(duration: 0.4, bounce: 0.35), value: model.mood)
+            .allowsHitTesting(false)
     }
 
     private static let topID = "top"
@@ -160,17 +157,33 @@ private struct WidgetContent: View {
         .overlay(alignment: .bottomTrailing) {
             ResizeGrip(u: u, onDrag: actions.resize)
         }
+        .overlay {
+            if let sheet = model.sheet {
+                CardSheet(u: u, onDismiss: model.closeSheet) {
+                    switch sheet {
+                    case .calendar:
+                        CalendarSheet(model: model, u: u)
+                    case .solve(let id):
+                        if let entry = model.entry(for: id) {
+                            SolveSheet(entry: entry, u: u, onClose: model.closeSheet) {
+                                model.delete(entry.solve)
+                            }
+                        }
+                    }
+                }
+                .transition(.opacity)
+            }
+        }
         // Dragging works on the first click, even when another app has focus.
         .allowsWindowActivationEvents(true)
         .animation(.easeOut(duration: 0.15), value: isRunning)
+        .animation(.easeOut(duration: 0.15), value: model.sheet)
     }
 
     private var header: some View {
         HStack(spacing: 2 * u) {
-            Text("CUBE HUB")
-                .font(.system(size: 11 * u, weight: .bold, design: .rounded))
-                .tracking(1.6 * u)
-                .foregroundStyle(Theme.muted)
+            PuzzlePicker(selection: model.puzzle, u: u, onSelect: model.selectPuzzle)
+                .disabled(model.phase != .idle)
             Spacer()
             IconButton(symbol: "shuffle", help: "New scramble", u: u) {
                 model.newScramble()
@@ -184,18 +197,25 @@ private struct WidgetContent: View {
         }
     }
 
+    /// Longer scrambles are set smaller so they stay a few lines tall.
+    private var scrambleFontSize: CGFloat {
+        switch model.puzzle {
+        case .two: 17
+        case .three: 15
+        case .four: 12
+        }
+    }
+
     private var scramble: some View {
         Text(model.scramble)
-            .font(.system(size: 15 * u, weight: .medium, design: .monospaced))
+            .font(.system(size: scrambleFontSize * u, weight: .medium, design: .monospaced))
             .foregroundStyle(Theme.ink)
             .multilineTextAlignment(.center)
             .lineSpacing(3 * u)
-            .lineLimit(2)
-            .minimumScaleFactor(0.8)
-            .frame(maxWidth: .infinity)
-            .frame(height: 42 * u)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, minHeight: 42 * u)
             .contextMenu {
-                Button("Copy Scramble") { copy(model.scramble) }
+                Button("Copy Scramble") { Pasteboard.copy(model.scramble) }
             }
     }
 
@@ -222,7 +242,7 @@ private struct WidgetContent: View {
     private static let panelHeight: CGFloat = 108
 
     private func netPanel(_ cube: Cube) -> some View {
-        CubeNetView(cube: cube, u: u)
+        CubeNetView(cube: cube, faceSize: 27.5, u: u)
             .padding(.horizontal, 9 * u)
             .frame(height: Self.panelHeight * u)
             .background(Theme.inset, in: RoundedRectangle(cornerRadius: 12 * u, style: .continuous))
@@ -240,13 +260,13 @@ private struct WidgetContent: View {
             statsRow("ao5", now: model.summary.ao5, best: model.summary.bestAo5)
             statsRow("ao12", now: model.summary.ao12, best: model.summary.bestAo12)
         }
-        .padding(.horizontal, 10 * u)
+        .padding(.horizontal, 8 * u)
         .frame(maxWidth: .infinity)
         .frame(height: Self.panelHeight * u)
         .background(Theme.inset, in: RoundedRectangle(cornerRadius: 12 * u, style: .continuous))
     }
 
-    private static let statColumn: CGFloat = 46
+    private static let statColumn: CGFloat = 47
 
     private func columnTitle(_ title: String) -> some View {
         Text(title)
@@ -276,20 +296,30 @@ private struct WidgetContent: View {
             .lineLimit(1)
             .minimumScaleFactor(0.6)
             .foregroundStyle(centis == nil ? Theme.faint : (highlighted ? Theme.go : Theme.ink))
+            // A little narrower than its column, so minute-long times don't run into each other.
+            .frame(width: (Self.statColumn - 6) * u, alignment: .trailing)
             .frame(width: Self.statColumn * u, alignment: .trailing)
     }
 
     // MARK: - History
 
     private var history: some View {
-        VStack(alignment: .leading, spacing: 6 * u) {
-            Text(model.solves.isEmpty ? "SOLVES" : "SOLVES · \(model.solves.count)")
-                .font(.system(size: 9 * u, weight: .bold, design: .rounded))
-                .tracking(1.2 * u)
-                .foregroundStyle(Theme.faint)
-                .padding(.leading, 4 * u)
-            if model.solves.isEmpty {
-                Text("No solves yet.\nYour times will land here.")
+        let listed = model.listedSolves
+        return VStack(alignment: .leading, spacing: 6 * u) {
+            HStack(spacing: 4 * u) {
+                Text(listed.isEmpty ? "SOLVES" : "SOLVES · \(listed.count)")
+                    .font(.system(size: 9 * u, weight: .bold, design: .rounded))
+                    .tracking(1.2 * u)
+                    .foregroundStyle(Theme.faint)
+                    .padding(.leading, 4 * u)
+                Spacer()
+                DateFilterButton(day: model.dateFilter, u: u, onOpen: model.showCalendar) {
+                    model.setDateFilter(nil)
+                }
+                .disabled(model.solves.isEmpty)
+            }
+            if listed.isEmpty {
+                Text("No \(model.puzzle.rawValue) solves yet.\nYour times will land here.")
                     .font(.system(size: 12 * u, weight: .medium, design: .rounded))
                     .foregroundStyle(Theme.faint)
                     .multilineTextAlignment(.center)
@@ -297,15 +327,12 @@ private struct WidgetContent: View {
                     .frame(height: 80 * u)
             } else {
                 LazyVStack(spacing: 1) {
-                    ForEach(Array(model.solves.enumerated().reversed()), id: \.element.id) { index, solve in
+                    ForEach(listed) { entry in
                         SolveRow(
-                            number: index + 1,
-                            solve: solve,
-                            ao5: model.rollingAo5[index],
-                            isBest: solve.centis == model.summary.bestSingle,
+                            entry: entry,
                             u: u,
-                            onCopy: { copy(solve.scramble) },
-                            onDelete: { model.delete(solve) }
+                            onInfo: { model.showDetails(for: entry.solve) },
+                            onDelete: { model.delete(entry.solve) }
                         )
                     }
                 }
@@ -313,51 +340,95 @@ private struct WidgetContent: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
+}
 
-    private func copy(_ text: String) {
+enum Pasteboard {
+    static func copy(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
     }
 }
 
-/// The scrambled cube unfolded: U on top, then L F R B in a strip, D below F.
-private struct CubeNetView: View {
-    let cube: Cube
+/// Chooses which puzzle is being timed. Each keeps its own solves and averages.
+private struct PuzzlePicker: View {
+    let selection: Puzzle
     let u: CGFloat
+    let onSelect: (Puzzle) -> Void
 
-    private static let sticker: CGFloat = 8.5
-    private static let stickerGap: CGFloat = 1
-    private static let faceGap: CGFloat = 2.5
-    private static let faceSize = sticker * 3 + stickerGap * 2
-    private static let placement: [(face: Face, column: CGFloat, row: CGFloat)] = [
-        (.up, 1, 0), (.left, 0, 1), (.front, 1, 1), (.right, 2, 1), (.back, 3, 1), (.down, 1, 2),
-    ]
+    @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
-        Canvas { context, _ in
-            for (face, faceColumn, faceRow) in Self.placement {
-                let stickers = cube.stickers(on: face)
-                let originX = faceColumn * (Self.faceSize + Self.faceGap)
-                let originY = faceRow * (Self.faceSize + Self.faceGap)
-                for index in 0..<9 {
-                    let rect = CGRect(
-                        x: (originX + CGFloat(index % 3) * (Self.sticker + Self.stickerGap)) * u,
-                        y: (originY + CGFloat(index / 3) * (Self.sticker + Self.stickerGap)) * u,
-                        width: Self.sticker * u,
-                        height: Self.sticker * u
-                    )
-                    context.fill(
-                        Path(roundedRect: rect, cornerRadius: 1.6 * u),
-                        with: .color(CubeColor(face: stickers[index]).color)
-                    )
+        HStack(spacing: 2 * u) {
+            ForEach(Puzzle.allCases, id: \.self) { puzzle in
+                Button {
+                    onSelect(puzzle)
+                } label: {
+                    Text(puzzle.rawValue)
+                        .font(.system(size: 11 * u, weight: .bold, design: .rounded))
+                        .foregroundStyle(puzzle == selection ? Theme.ink : (isEnabled ? Theme.muted : Theme.faint))
+                        .frame(width: 36 * u, height: 22 * u)
+                        .background(puzzle == selection ? Color.white.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 6 * u, style: .continuous))
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .help("Time \(puzzle.rawValue) solves")
             }
         }
-        .frame(
-            width: (Self.faceSize * 4 + Self.faceGap * 3) * u,
-            height: (Self.faceSize * 3 + Self.faceGap * 2) * u
-        )
-        .accessibilityLabel("Scrambled cube preview")
+        .padding(2 * u)
+        .background(Theme.inset, in: RoundedRectangle(cornerRadius: 8 * u, style: .continuous))
+    }
+}
+
+/// Opens the calendar; once a day is chosen it names the day and offers a way back.
+private struct DateFilterButton: View {
+    let day: Date?
+    let u: CGFloat
+    let onOpen: () -> Void
+    let onClear: () -> Void
+
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        HStack(spacing: 2 * u) {
+            Button(action: onOpen) {
+                HStack(spacing: 4 * u) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 9 * u, weight: .semibold))
+                    Text(day.map(DayFormat.short) ?? "All dates")
+                        .font(.system(size: 10 * u, weight: .semibold, design: .rounded))
+                }
+                .foregroundStyle(day == nil ? (isEnabled ? Theme.muted : Theme.faint) : Theme.card)
+                .padding(.horizontal, 7 * u)
+                .frame(height: 20 * u)
+                .background(day == nil ? Theme.inset : Theme.go, in: Capsule())
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .help("Show solves from one day")
+            if day != nil {
+                Button(action: onClear) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8 * u, weight: .bold))
+                        .foregroundStyle(Theme.muted)
+                        .frame(width: 20 * u, height: 20 * u)
+                        .background(Theme.inset, in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .help("Show every day")
+            }
+        }
+    }
+}
+
+enum DayFormat {
+    /// "Oct 6", with the year added once it isn't this one.
+    static func short(_ day: Date) -> String {
+        let sameYear = Calendar.current.isDate(day, equalTo: Date(), toGranularity: .year)
+        return day.formatted(sameYear ? .dateTime.month(.abbreviated).day() : .dateTime.month(.abbreviated).day().year())
     }
 }
 
@@ -401,53 +472,36 @@ private struct TimerReadout: View {
 }
 
 private struct SolveRow: View {
-    let number: Int
-    let solve: Solve
-    let ao5: Int?
-    let isBest: Bool
+    let entry: SolveEntry
     let u: CGFloat
-    let onCopy: () -> Void
+    let onInfo: () -> Void
     let onDelete: () -> Void
 
     @State private var hovering = false
 
     var body: some View {
         HStack(spacing: 8 * u) {
-            Text("\(number)")
+            Text("\(entry.number)")
                 .font(.system(size: 11 * u, weight: .medium, design: .monospaced))
                 .foregroundStyle(Theme.faint)
                 .frame(width: 30 * u, alignment: .trailing)
-            Text(TimeFormat.string(centis: solve.centis))
+            Text(TimeFormat.string(centis: entry.solve.centis))
                 .font(.system(size: 14 * u, weight: .semibold, design: .rounded))
                 .monospacedDigit()
-                .foregroundStyle(isBest ? Theme.go : Theme.ink)
-            if isBest {
-                Text("PB")
-                    .font(.system(size: 9 * u, weight: .heavy, design: .rounded))
-                    .foregroundStyle(Theme.card)
-                    .padding(.horizontal, 5 * u)
-                    .padding(.vertical, 2 * u)
-                    .background(Theme.go, in: Capsule())
+                .foregroundStyle(entry.isBest ? Theme.go : Theme.ink)
+            if entry.isBest {
+                PBTag(u: u)
             }
             Spacer()
             if hovering {
-                Button(action: onDelete) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 9 * u, weight: .bold))
-                        .foregroundStyle(Theme.muted)
-                        .frame(width: 18 * u, height: 18 * u)
-                        .background(Theme.inset, in: Circle())
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .focusable(false)
-                .help("Delete this solve")
-            } else if let ao5 {
+                rowButton("xmark", help: "Delete this solve", action: onDelete)
+            } else if let ao5 = entry.ao5 {
                 Text("ao5 \(TimeFormat.string(centis: ao5))")
                     .font(.system(size: 11 * u, weight: .medium, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(Theme.muted)
             }
+            rowButton("info", help: "More info", action: onInfo)
         }
         .padding(.horizontal, 6 * u)
         .frame(height: 26 * u)
@@ -455,14 +509,41 @@ private struct SolveRow: View {
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .contextMenu {
-            Button("Copy Scramble", action: onCopy)
+            Button("More Info", action: onInfo)
+            Button("Copy Scramble") { Pasteboard.copy(entry.solve.scramble) }
             Button("Delete Solve", role: .destructive, action: onDelete)
         }
-        .help(solve.scramble)
+    }
+
+    private func rowButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 9 * u, weight: .bold))
+                .foregroundStyle(hovering ? Theme.ink : Theme.muted)
+                .frame(width: 18 * u, height: 18 * u)
+                .background(Theme.inset, in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .help(help)
     }
 }
 
-private struct IconButton: View {
+struct PBTag: View {
+    let u: CGFloat
+
+    var body: some View {
+        Text("PB")
+            .font(.system(size: 9 * u, weight: .heavy, design: .rounded))
+            .foregroundStyle(Theme.card)
+            .padding(.horizontal, 5 * u)
+            .padding(.vertical, 2 * u)
+            .background(Theme.go, in: Capsule())
+    }
+}
+
+struct IconButton: View {
     let symbol: String
     let help: String
     let u: CGFloat

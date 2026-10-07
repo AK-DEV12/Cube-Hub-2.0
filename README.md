@@ -6,13 +6,20 @@ A Rubik's cube timer that lives in your Mac's menu bar. Click the icon and a sma
   <img src="docs/widget.png" width="360" alt="Cube Hub showing a scramble, the timer, the scrambled cube and recent solves">
   <img src="docs/new-best.png" width="360" alt="Cube Hub after a new best time, with the mascot celebrating">
 </p>
+<p>
+  <img src="docs/calendar.png" width="360" alt="The calendar, with the days that have solves lit up and one day chosen">
+  <img src="docs/solve-details.png" width="360" alt="The details of a 4x4 solve: time, date, scramble and the scrambled cube">
+</p>
 
 ## What it does
 
-- **Scrambles.** A fresh 20-move scramble for every solve, with a picture of the scrambled cube so you can check you scrambled correctly. The picture assumes white on top and green facing you.
+- **2x2, 3x3 and 4x4.** Pick the puzzle at the top of the panel. Each one has its own scrambles, solves and averages.
+- **Scrambles.** A fresh scramble for every solve, with a picture of the scrambled cube so you can check you scrambled correctly. The picture assumes white on top and green facing you.
 - **Timer.** Hold space until the time turns green, release to start, press space to stop.
 - **Averages.** Your current and best single, average of 5 and average of 12. Averages drop the fastest and slowest solve, the way competitions do.
-- **History.** Every solve is saved with its scramble and survives restarts.
+- **History.** Every solve is saved with its scramble and the date, and survives restarts.
+- **Browse by day.** Open the calendar above the solve list to see which days you practised, and pick one to show only that day's solves.
+- **Solve details.** Click the **i** on any solve for its time, when you did it, the scramble, and what the scrambled cube looked like.
 - **Cubby.** A pixel cube who peeks out from behind the panel. Its face is the front of the scrambled cube, it twists while you solve, and it celebrates when you set a new best.
 
 ## Install
@@ -39,7 +46,8 @@ Click the menu bar icon to show or hide the panel. Right-click it for the menu, 
 |---|---|
 | Space (hold, then release) | Start the timer |
 | Space | Stop the timer |
-| Esc | Throw away the solve in progress |
+| Esc | Throw away the solve in progress, or close the calendar or solve details |
+| ⌘2, ⌘3, ⌘4 | Switch to 2x2, 3x3 or 4x4 |
 | ⌘R | New scramble |
 | ⌘⌫ | Delete the last solve |
 | ⌘= and ⌘- | Make the panel bigger or smaller |
@@ -52,6 +60,7 @@ The panel needs keyboard focus for the space bar to work, so click it once first
 - **Move it** by dragging anywhere on the panel.
 - **Resize it** by dragging the grip in the bottom-right corner. Wider makes everything bigger; shorter shows less at once, down to just the scramble and timer.
 - **Scroll** the panel to reach whatever doesn't fit.
+- **Filter by day** with the calendar button above the solve list. Days with solves are lit; the × next to the chosen day shows every day again.
 - **Delete a solve** by hovering over it and clicking the ×. Right-click a solve to copy its scramble.
 
 To start Cube Hub when you log in, choose **Open at Login** from the menu.
@@ -81,8 +90,8 @@ swift test
 
 ## How it's put together
 
-- `Sources/CubeHubCore` holds the logic with no interface attached: scramble generation, the cube simulation behind the preview, averages, and saving solves. This is what the tests cover.
+- `Sources/CubeHubCore` holds the logic with no interface attached: scramble generation, the cube simulation behind the preview (any size from 2x2 to 5x5), averages, and saving solves. This is what the tests cover.
 - `Sources/CubeHub` is the app: the menu bar item, the floating panel, the timer, and Cubby.
 - `scripts/build-app.sh` builds the package and wraps it into `CubeHub.app`. Add `--zip` to also produce the zip that gets attached to a release.
 
-Scrambles are random sequences of moves rather than the random-state scrambles used in official competitions.
+Scrambles are random sequences of moves rather than the random-state scrambles used in official competitions: 10 moves of R, U and F for 2x2, 20 moves for 3x3, and 40 moves including wide turns for 4x4.

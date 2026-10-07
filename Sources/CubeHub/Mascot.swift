@@ -130,6 +130,19 @@ enum MascotSprite {
     private static let bodyTop = 8
     private static let jump = [0, -2, -4, -5, -5, -4, -2, 0]
 
+    /// Cubby's face for a scrambled cube: its front face, sampled down to three
+    /// by three when the cube is another size. The middle stays green, the
+    /// colour Cubby turns when solved.
+    static func pattern(for cube: Cube) -> [CubeColor] {
+        let front = cube.stickers(on: .front)
+        let sample = [0, cube.size / 2, cube.size - 1]
+        var pattern = sample.flatMap { row in
+            sample.map { column in CubeColor(face: front[row * cube.size + column]) }
+        }
+        pattern[4] = .green
+        return pattern
+    }
+
     /// Cubby's silhouette for the menu bar, tinted by the system.
     static func menuBarImage() -> NSImage {
         let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { _ in
