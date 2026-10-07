@@ -26,7 +26,7 @@ A Rubik's cube timer that lives in your Mac's menu bar. Click the icon and a sma
 
 You need macOS 15 or later. The app runs on both Apple Silicon and Intel Macs.
 
-1. Download [CubeHub.zip](https://github.com/AK-DEV12/cube-hub/releases/latest/download/CubeHub.zip) and unzip it.
+1. Download [CubeHub.zip](https://github.com/AK-DEV12/Cube-Hub-2.0/releases/latest/download/CubeHub.zip) and unzip it.
 2. Drag **CubeHub** into your Applications folder and open it.
 3. macOS will refuse to open it the first time, because the app isn't signed with a paid Apple developer account. Click **Done**, then open **System Settings › Privacy & Security**, scroll down to the message about Cube Hub, and click **Open Anyway**. You only do this once.
 
@@ -74,8 +74,8 @@ Solves are stored on your Mac in `~/Library/Application Support/CubeHub/solves.j
 You need Xcode or its command line tools.
 
 ```bash
-git clone https://github.com/AK-DEV12/cube-hub.git
-cd cube-hub
+git clone https://github.com/AK-DEV12/Cube-Hub-2.0.git
+cd Cube-Hub-2.0
 ./scripts/build-app.sh
 open build/CubeHub.app
 ```
