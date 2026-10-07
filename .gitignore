@@ -1,0 +1,8 @@
+# Swift Package Manager build output
+.build/
+
+# The packaged app from scripts/build-app.sh
+build/
+
+.DS_Store
+.swiftpm/
