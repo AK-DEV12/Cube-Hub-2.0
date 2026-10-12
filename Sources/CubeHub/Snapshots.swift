@@ -34,12 +34,12 @@ enum Snapshots {
         func pause(_ seconds: TimeInterval) async { try? await Task.sleep(for: .seconds(seconds)) }
         func now() -> TimeInterval { ProcessInfo.processInfo.systemUptime }
         // Posted to the event queue, so input goes through the same handlers as a real keyboard and mouse.
-        func key(_ type: NSEvent.EventType, _ characters: String = " ", code: UInt16 = 49, command: Bool = false, isRepeat: Bool = false) {
+        func key(_ type: NSEvent.EventType, _ characters: String = " ", code: UInt16 = 49, command: Bool = false, isRepeat: Bool = false, at timestamp: TimeInterval? = nil) {
             guard let event = NSEvent.keyEvent(
                 with: type,
                 location: .zero,
                 modifierFlags: command ? .command : [],
-                timestamp: now(),
+                timestamp: timestamp ?? now(),
                 windowNumber: window.windowNumber,
                 context: nil,
                 characters: characters,
@@ -92,11 +92,14 @@ enum Snapshots {
             key(.keyDown, isRepeat: true)
             await pause(0.4)
             capture("3-ready")
-            key(.keyUp)
+            // The timer reads its times off the key events, so backdating the
+            // release makes this a believable solve without a 15 second wait.
+            // It still beats every seeded solve, so it's a new best.
+            let started = now() - 14
+            key(.keyUp, at: started)
             await pause(1.25)
             capture("4-running")
-            // Faster than every seeded solve, so this one is a new best.
-            key(.keyDown)
+            key(.keyDown, at: started + 15.42)
             await pause(0.05)
             key(.keyDown, isRepeat: true)
             key(.keyUp)
